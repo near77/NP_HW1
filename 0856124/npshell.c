@@ -9,7 +9,7 @@
 #define TOK_BUFSIZE 64
 #define TOK_DELIMITERS " \t\r\n\a"
 
-//--------built in fuction-------------
+//--------built in function-------------
 char *builtin_str[] = {
     "exit",
     "printenv",
@@ -86,6 +86,7 @@ int sh_execute(char **args)// execute built in command
             return (*builtin_func[i])(args);
         }
     }
+    //if it's not built in command ->launched by exec 
     return sh_launch(args);
 }
 

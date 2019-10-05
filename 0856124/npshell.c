@@ -1,79 +1,183 @@
-//https://www.youtube.com/watch?v=z4LEuxMGGs8
-
-#include <stdio.h>
-#include <stdlib.h>
 #include <sys/wait.h>
+#include <sys/types.h>
 #include <unistd.h>
+#include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
-void read_command(char cmd[], char *parameters[]){
-    char line[1024];
-    int count=0, i=0, j=0;
-    char *array[100], *pch;
+#define RL_BUFSIZE 1024
+#define TOK_BUFSIZE 64
+#define TOK_DELIMITERS " \t\r\n\a"
 
-    for(;;){
-        int c = fgetc(stdin);
-        line[count++] = (char) c;
-        if(c == '\n'){
-            break;
-        }
-    }//read user input
-    if(count == 1){
-        return;
-    }//just enter
-    pch = strtok(line, " \n");//split line with space and store to pch
+//--------built in fuction-------------
+char *builtin_str[] = {
+    "exit",
+    "printenv",
+    "setenv"
+};
 
-    while(pch != NULL){
-        array[i++] = strdup(pch);//copy tokens in pch to array
-        pch = strtok(NULL, " \n");//set pch to NULL
-    }
-    strcpy(cmd, array[0]);//copy first token to cmd which is command
-    for (int j=0;j<i;j++){
-        parameters[j] = array[j];//parameters store every tokens of pch including cmd
-    }
-    parameters[i] = NULL;
+int sh_exit(char **args)
+{
+    return 0;
 }
 
-
-void type_prompt(){
-    /*
-    static int first_time = 1;
-    if(first_time){
-        const char* CLEAR_SCREEN_ANSI = "\e[1;1H\e[2J";//e means escape
-        write(STDOUT_FILENO, CLEAR_SCREEN_ANSI, 12);
-        first_time = 0;
-    }
-    */
-    printf("%c ", '%');
+int sh_printenv(char **args)
+{
+    printf("%s\n", getenv(args[1]));
 }
 
+int sh_setenv(char **args)
+{
+    setenv("PATH", args[1], 1);
+    printf("env had been set.\n");
+}
 
-int main(){
-    char cmd[100], command[100], *parameters[20];
-    char *envp[] = {(char *) "PATH=/home/t0856124/Desktop/NP_HW1/0856124/bin", 0};
+int (*builtin_func[]) (char **) = {
+    &sh_exit,
+    &sh_printenv,
+    &sh_setenv
+};
 
-    while(1){
-        printf("%c ", '%');
-        read_command(command, parameters);
-        if(fork()!=0){
-            wait(NULL);
-        }else{
-            strcpy(cmd, "/home/t0856124/Desktop/NP_HW1/0856124/bin/");
-            strcat(cmd, command);
-            execve(cmd, parameters, envp);
+int num_builtins() {
+    return sizeof(builtin_str) / sizeof(char *);
+}
+//-------------------------------------
+
+int sh_launch(char **args)// execute command
+{
+    pid_t pid, wpid;
+    int status;
+
+    pid = fork();
+    if(pid==0){
+
+        if(execvp(args[0], args) == -1)
+        {
+            perror("Shell");
+            printf("Unknown command: [%s].\n", args[0]);
         }
-        
-        if(strcmp(command, "exit")==0){
-            break;
-        }else if(strcmp(command, "printenv")==0){
-            printf("PATH = %s\n", getenv("PATH"));
-        }else if(strcmp(command, "setenv")==0){
-            setenv("PATH", *parameters, 0);
-            printf("env had been set.\n");
+        else if(pid < 0)
+        {
+            perror("Shell");
         }
-        cmd[0] = 0;
-        command[0] = 0;
-        *parameters[0] = 0;
+        else
+        {
+            do
+            {
+                wpid = waitpid(pid, &status, WUNTRACED);
+            }while(!WIFEXITED(status) && !WIFSIGNALED(status));
+        }
     }
+    return 1;
+}
+
+int sh_execute(char **args)// execute built in command
+{
+    int i;
+    if (args[0] == NULL) 
+    {
+        // An empty command was entered.
+        return 1;
+    }
+
+    for (i = 0; i < num_builtins(); i++) 
+    {
+        if (strcmp(args[0], builtin_str[i]) == 0) {
+            return (*builtin_func[i])(args);
+        }
+    }
+    return sh_launch(args);
+}
+
+char *read_line(void)
+{
+    int bufsize = RL_BUFSIZE;
+    int position = 0;
+    char *buffer = malloc(sizeof(char)*bufsize);
+    int c;
+    if(!buffer)
+    {
+        printf("Allocation Fail.\n");
+        exit(EXIT_FAILURE);
+    }
+    while(1)
+    {
+        c = getchar();
+        if(c == EOF || c == '\n')
+        {
+            buffer[position] = '\0';
+            return buffer;
+        }
+        else
+        {
+            buffer[position] = c;
+        }
+        position++;
+
+        if(position >= bufsize)
+        {
+            bufsize += RL_BUFSIZE;
+            buffer = realloc(buffer, bufsize);
+            if(!buffer)
+            {
+                printf("Allocation Fail.\n");
+                exit(EXIT_FAILURE);
+            }
+        }
+    }
+}
+
+char **parse_line(char *line)// parse line with TOK_DELIMETERS
+{
+    int bufsize = TOK_BUFSIZE, position = 0;
+    char **tokens = malloc(sizeof(char*) * bufsize);
+    char *token;
+    if(!tokens)
+    {
+        printf("Allocation Fail.\n");
+        exit(EXIT_FAILURE);
+    }
+    token = strtok(line, TOK_DELIMITERS);
+    while(token != NULL)
+    {
+        tokens[position] = token;
+        position++;
+        if(position >= bufsize){
+            bufsize += TOK_BUFSIZE;
+            tokens = realloc(tokens, sizeof(char*) * bufsize);
+            if(!tokens)
+            {
+                printf("Allocation Fail.\n");
+                exit(EXIT_FAILURE);
+            }
+        }
+        token = strtok(NULL, TOK_DELIMITERS);
+    }
+    tokens[position] = NULL;
+    return tokens;
+}
+
+void shell_loop(void)
+{
+    char *line;
+    char **args;
+    int status;
+    do 
+    {
+        printf("%% ");
+        line = read_line();
+        args = parse_line(line);
+        status = sh_execute(args);
+        free(line);
+        free(args);
+    }while (status);
+}
+
+int main(int argc, char **argv, char *envp[])
+{
+    //--------initialize---------
+    setenv("PATH", "bin:.", 1);
+    //---------------------------
+    shell_loop();
     return 0;
 }

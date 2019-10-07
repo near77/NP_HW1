@@ -8,16 +8,9 @@
 #define RL_BUFSIZE 1024
 #define TOK_BUFSIZE 64
 #define TOK_DELIMITERS " \t\r\n\a"
-#define CMD_DELIMITERS " |"
-#define ARRAY_SIZE(x) (sizeof((x))/sizeof(*(x)))
+#define CMD_DELIMITERS "|"
 
 //--------built in function-------------
-char *builtin_str[] = {
-    "exit",
-    "printenv",
-    "setenv"
-};
-
 int sh_exit(char **args)
 {
     exit(0);
@@ -26,13 +19,21 @@ int sh_exit(char **args)
 int sh_printenv(char **args)
 {
     printf("%s\n", getenv(args[1]));
+    return 0;
 }
 
 int sh_setenv(char **args)
 {
     setenv("PATH", args[1], 1);
     printf("env had been set.\n");
+    return 0;
 }
+
+char *builtin_str[] = {
+    "exit",
+    "printenv",
+    "setenv"
+};
 
 int (*builtin_func[]) (char **) = {
     &sh_exit,
@@ -49,35 +50,6 @@ static inline void error(const char *msg)
 {
     perror(msg);
     exit(EXIT_FAILURE);
-}
-
-int cisshPipe(char **command1, char **command2)
-{
-    int fd[2];
-    pid_t childPid;
-    if (pipe(fd) != 0)
-        error("failed to create pipe");
-
-    if ((childPid = fork()) == -1)
-        error("failed to fork");
-
-    if (childPid == 0)
-    {
-        close(fd[0]);
-        dup2(fd[1], STDOUT_FILENO);
-        close(fd[1]);
-        execvp(command1[0], command1);
-        error("failed to exec command 1");
-    }
-    else
-    {
-        close(fd[1]);
-        dup2(fd[0], STDIN_FILENO);
-        close(fd[0]);
-        execvp(command2[0], command2);
-        error("failed to exec command 2");
-    }
-    return 0;
 }
 
 int sh_launch(char **args)// execute command
@@ -200,7 +172,7 @@ char **parse_cmd(char *line)// parse line with TOK_DELIMETERS
     return tokens;
 }
 
-char **parse_line(char *line)// parse line with TOK_DELIMETERS
+char **parse_line(char *cmd)// parse line with TOK_DELIMETERS
 {
     int bufsize = TOK_BUFSIZE, position = 0;
     char **tokens = malloc(sizeof(char*) * bufsize);
@@ -210,7 +182,7 @@ char **parse_line(char *line)// parse line with TOK_DELIMETERS
         printf("Allocation Fail.\n");
         exit(EXIT_FAILURE);
     }
-    token = strtok(line, TOK_DELIMITERS);
+    token = strtok(cmd, TOK_DELIMITERS);
     while(token != NULL)
     {
         tokens[position] = token;
@@ -235,33 +207,70 @@ void shell_loop(void)
     char *line;
     char **cmd;
     char **args;
-    char **cmd_list[100];
+    char **cmd_list[256];
     int status;
+    pid_t child_pid;
     do 
     {
         int i = 0;
         printf("%% ");
         line = read_line();
         cmd = parse_cmd(line);
-        while(cmd[i])
+        while(cmd[i])// calculate number of command
         {
             args = parse_line(cmd[i]);
-            // status = sh_execute(args);
             cmd_list[i] = args;
             i++;
         }
         if(i > 1)
         {
-            int j = 0;
-            while(cmd_list[j+1])
+            int fd[i][2];
+            for(int k=0;k<i;k++)
             {
-                cisshPipe(cmd_list[j], cmd_list[j+1]);
+                pipe(fd[k]);
+            }
+            int j = 0;
+            while(cmd_list[j])
+            {
+                if ((child_pid = fork()) == -1)
+                    error("failed to fork");
+                if(child_pid == 0)
+                {
+                    if(j == 0)
+                    {
+                        dup2(fd[j][0], STDOUT_FILENO);
+                    }
+                    else if(j == i-1)
+                    {
+                        dup2(fd[j-1][1], STDIN_FILENO);
+                        char tmp[50];
+                        int ijij = read(fd[j-1][1], tmp, 30);
+                        printf("Tmp: %s\n", tmp);
+                        printf("last\n");
+                    }
+                    else
+                    {
+                        dup2(fd[j-1][1], STDIN_FILENO);
+                        dup2(fd[j][0], STDOUT_FILENO);
+                    }
+                    execvp(cmd_list[j][0], cmd_list[j]);
+                    exit(0);
+                }
+                else
+                {
+                    int status_child;
+                    waitpid(child_pid, &status_child, 0);
+                }
                 j++;
             }
         }
-        else
+        else if(i == 1)// input single command
         {
             status = sh_execute(args);
+        }
+        else// input nothing
+        {
+            continue;
         }
         free(line);
         free(cmd);

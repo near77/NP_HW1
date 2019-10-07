@@ -1,4 +1,5 @@
-Makefile
+123
+file
 bin
 bin_linux
 npshell

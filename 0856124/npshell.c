@@ -239,14 +239,12 @@ void shell_loop(void)
                     if(j == 0)
                     {
                         dup2(fd[j][0], STDOUT_FILENO);
+                        printf("fd %d %d \n", fd[j][0], fd[j][1]);
                     }
                     else if(j == i-1)
                     {
                         dup2(fd[j-1][1], STDIN_FILENO);
-                        char tmp[50];
-                        int ijij = read(fd[j-1][1], tmp, 30);
-                        printf("Tmp: %s\n", tmp);
-                        printf("last\n");
+                        printf("Hello \n");
                     }
                     else
                     {

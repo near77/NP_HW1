@@ -8,7 +8,7 @@
 #define RL_BUFSIZE 1024
 #define TOK_BUFSIZE 64
 #define TOK_DELIMITERS " \t\r\n\a"
-#define CMD_DELIMITERS ">"
+#define CMD_DELIMITERS " |"
 #define ARRAY_SIZE(x) (sizeof((x))/sizeof(*(x)))
 
 //--------built in function-------------
@@ -105,6 +105,11 @@ int sh_launch(char **args)// execute command
             }while(!WIFEXITED(status) && !WIFSIGNALED(status));
         }
     }
+    else
+    {
+        wait(NULL);    
+    }
+    
     return 1;
 }
 

@@ -236,22 +236,28 @@ void shell_loop(void)
                     error("failed to fork");
                 if(child_pid == 0)
                 {
+                    int old_stdout = dup(STDOUT_FILENO);
+                    int old_stdin = dup(STDIN_FILENO);
+                
                     if(j == 0)
                     {
-                        dup2(fd[j][0], STDOUT_FILENO);
-                        printf("fd %d %d \n", fd[j][0], fd[j][1]);
+                        dup2(fd[j][1], STDOUT_FILENO);
                     }
                     else if(j == i-1)
                     {
-                        dup2(fd[j-1][1], STDIN_FILENO);
-                        printf("Hello \n");
+                        dup2(fd[j-1][0], STDIN_FILENO);
                     }
                     else
                     {
-                        dup2(fd[j-1][1], STDIN_FILENO);
-                        dup2(fd[j][0], STDOUT_FILENO);
+                        dup2(fd[j-1][0], STDIN_FILENO);
+                        dup2(fd[j][1], STDOUT_FILENO);
                     }
                     execvp(cmd_list[j][0], cmd_list[j]);
+                    //----Bug: Exec won't back-----------
+                    dup2(old_stdout, STDOUT_FILENO);
+                    dup2(old_stdin, STDIN_FILENO);
+                    printf("------------------\n");
+                    printf("command: %s\n", cmd_list[j][0]);
                     exit(0);
                 }
                 else

@@ -1,16 +1,14 @@
-#include <sys/wait.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-
-#define RL_BUFSIZE 1024
-#define TOK_BUFSIZE 64
-#define TOK_DELIMITERS " \t\r\n\a"
+#include <ctype.h>
+#include <unistd.h>
+#define READBUF_SIZE 1024
+#define TOKENBUF_SIZE 128
 #define CMD_DELIMITERS "|"
+#define TOK_DELIMITERS " "
 
-//--------built in function-------------
+//----------------built in functions------------------
 int sh_exit(char **args)
 {
     exit(0);
@@ -18,8 +16,12 @@ int sh_exit(char **args)
 
 int sh_printenv(char **args)
 {
-    printf("%s\n", getenv(args[1]));
-    return 0;
+    char * env = getenv(args[1]);
+    if(env)
+    {
+        printf("%s\n", getenv(args[1]));
+    }
+    return 1;
 }
 
 int sh_setenv(char **args)
@@ -44,72 +46,21 @@ int (*builtin_func[]) (char **) = {
 int num_builtins() {
     return sizeof(builtin_str) / sizeof(char *);
 }
-//-------------------------------------
+//---------------------------------------------------
 
-static inline void error(const char *msg)
+
+struct number_pipe
 {
-    perror(msg);
-    exit(EXIT_FAILURE);
-}
+    int target_cmd_num;
+    int *fd;
+};
 
-int sh_launch(char **args)// execute command
+char *read_line()
 {
-    pid_t pid, wpid;
-    int status;
-
-    pid = fork();
-    if(pid==0){
-
-        if(execvp(args[0], args) == -1)
-        {
-            perror("Shell");
-            printf("Unknown command: [%s].\n", args[0]);
-        }
-        else if(pid < 0)
-        {
-            perror("Shell");
-        }
-        else
-        {
-            do
-            {
-                wpid = waitpid(pid, &status, WUNTRACED);
-            }while(!WIFEXITED(status) && !WIFSIGNALED(status));
-        }
-    }
-    else
-    {
-        wait(NULL);    
-    }
-    
-    return 1;
-}
-
-int sh_execute(char **args)// execute built in command
-{
-    int i;
-    if (args[0] == NULL) 
-    {
-        // An empty command was entered.
-        return 1;
-    }
-
-    for (i = 0; i < num_builtins(); i++) 
-    {
-        if (strcmp(args[0], builtin_str[i]) == 0) {
-            return (*builtin_func[i])(args);
-        }
-    }
-    //if it's not built in command ->launched by exec 
-    return sh_launch(args);
-}
-
-char *read_line(void)
-{
-    int bufsize = RL_BUFSIZE;
-    int position = 0;
-    char *buffer = malloc(sizeof(char)*bufsize);
+    int bufsize = READBUF_SIZE;
+    int line_position = 0;
     int c;
+    char *buffer = malloc(sizeof(char)*bufsize);
     if(!buffer)
     {
         printf("Allocation Fail.\n");
@@ -120,18 +71,17 @@ char *read_line(void)
         c = getchar();
         if(c == EOF || c == '\n')
         {
-            buffer[position] = '\0';
+            buffer[line_position] = '\0';
             return buffer;
         }
         else
         {
-            buffer[position] = c;
+            buffer[line_position] = c;
         }
-        position++;
-
-        if(position >= bufsize)
+        line_position++;
+        if(line_position >= bufsize)
         {
-            bufsize += RL_BUFSIZE;
+            bufsize += READBUF_SIZE;
             buffer = realloc(buffer, bufsize);
             if(!buffer)
             {
@@ -142,24 +92,24 @@ char *read_line(void)
     }
 }
 
-char **parse_cmd(char *line)// parse line with TOK_DELIMETERS
+char **parse_line(char *line, char * delimeters)// parse line with CMD_DELIMETERS
 {
-    int bufsize = TOK_BUFSIZE, position = 0;
-    char **tokens = malloc(sizeof(char*) * bufsize);
+    int bufsize = TOKENBUF_SIZE, position = 0;
+    char **tokens = (char **)malloc(sizeof(char*) * bufsize);
     char *token;
     if(!tokens)
     {
         printf("Allocation Fail.\n");
         exit(EXIT_FAILURE);
     }
-    token = strtok(line, CMD_DELIMITERS);
+    token = strtok(line, delimeters);
     while(token != NULL)
     {
         tokens[position] = token;
         position++;
         if(position >= bufsize){
-            bufsize += TOK_BUFSIZE;
-            tokens = realloc(tokens, sizeof(char*) * bufsize);
+            bufsize += TOKENBUF_SIZE;
+            tokens = (char **)realloc(tokens, sizeof(char*) * bufsize);
             if(!tokens)
             {
                 printf("Allocation Fail.\n");
@@ -172,117 +122,104 @@ char **parse_cmd(char *line)// parse line with TOK_DELIMETERS
     return tokens;
 }
 
-char **parse_line(char *cmd)// parse line with TOK_DELIMETERS
-{
-    int bufsize = TOK_BUFSIZE, position = 0;
-    char **tokens = malloc(sizeof(char*) * bufsize);
-    char *token;
-    if(!tokens)
-    {
-        printf("Allocation Fail.\n");
-        exit(EXIT_FAILURE);
-    }
-    token = strtok(cmd, TOK_DELIMITERS);
-    while(token != NULL)
-    {
-        tokens[position] = token;
-        position++;
-        if(position >= bufsize){
-            bufsize += TOK_BUFSIZE;
-            tokens = realloc(tokens, sizeof(char*) * bufsize);
-            if(!tokens)
-            {
-                printf("Allocation Fail.\n");
-                exit(EXIT_FAILURE);
-            }
-        }
-        token = strtok(NULL, TOK_DELIMITERS);
-    }
-    tokens[position] = NULL;
-    return tokens;
-}
 
-void shell_loop(void)
+void shell_loop()
 {
-    char *line;
-    char **cmd;
-    char **args;
-    char **cmd_list[256];
-    int status;
-    pid_t child_pid;
-    do 
+    int status = 1;
+    char *line;// input
+    char **cmd;// cmd
+    char **args;// cmd arguments
+    struct number_pipe pipe_num[1000];// record numbered pipe
+    int numpipe_idx = 0;// record numbered pipe list idx
+    int cmd_no = 1; //record ?th cmd is executing
+
+    do
     {
-        int i = 0;
-        printf("%% ");
+        printf("<o> ");
         line = read_line();
-        cmd = parse_cmd(line);
-        while(cmd[i])// calculate number of command
+        cmd = parse_line(line, CMD_DELIMITERS);
+        int num_of_cmd = 0;
+        while(cmd[num_of_cmd])// calculate number of command
         {
-            args = parse_line(cmd[i]);
-            cmd_list[i] = args;
-            i++;
+            num_of_cmd++;
         }
-        if(i > 1)
+        int fd[num_of_cmd][2];// Fd for pipe
+        int cmd_idx = 0;
+        while(cmd_idx < num_of_cmd)
         {
-            int fd[i][2];
-            for(int k=0;k<i;k++)
-            {
-                pipe(fd[k]);
-            }
+            args = parse_line(cmd[cmd_idx], TOK_DELIMITERS);
             int j = 0;
-            while(cmd_list[j])
+            while(args[j])
             {
-                if ((child_pid = fork()) == -1)
-                    error("failed to fork");
-                if(child_pid == 0)
+                printf("Args: %s\n", args[j]);
+                j++;
+            }
+            
+            //----------------Check if cmd is built in function----------------------
+            int builtin_flag = 0;
+            if (args[0] == NULL) 
+            {
+                // An empty command was entered.
+                continue;
+            }
+            for (int i = 0; i < num_builtins(); i++) 
+            {
+                if (strcmp(args[0], builtin_str[i]) == 0) {
+                    builtin_flag = 1;
+                    (*builtin_func[i])(args);// Execute built in command
+                }
+                break;
+            }
+            if(builtin_flag == 1)
+            {
+                cmd_no++;
+                cmd_idx++;
+                continue;
+            }
+            //----------------------------------------------------------------------
+            pipe(fd[cmd_idx]);
+
+            //----------------Check if there are num pipe---------------------------
+            if(cmd[cmd_idx+1])
+            {
+                if(isdigit(cmd[cmd_idx+1][0]))
                 {
-                    int old_stdout = dup(STDOUT_FILENO);
-                    int old_stdin = dup(STDIN_FILENO);
-                
-                    if(j == 0)
+                    if(cmd[cmd_idx+1][0]!='1')// record every num cmd
                     {
-                        dup2(fd[j][1], STDOUT_FILENO);
+                        pipe_num[numpipe_idx].target_cmd_num = cmd_no + ((int)cmd[cmd_idx+1][0]-48);
+                        // start from previous cmd
+                        pipe_num[numpipe_idx].fd = fd[cmd_idx];// current cmd's fd
+                        printf("numpipe recorded| target: %d | fd: %d %d\n", \
+                            pipe_num[numpipe_idx].target_cmd_num, pipe_num[numpipe_idx].fd[0], pipe_num[numpipe_idx].fd[1]);
+                        numpipe_idx ++;
+                        numpipe_idx %= 1000;
                     }
-                    else if(j == i-1)
-                    {
-                        dup2(fd[j-1][0], STDIN_FILENO);
-                    }
-                    else
-                    {
-                        dup2(fd[j-1][0], STDIN_FILENO);
-                        dup2(fd[j][1], STDOUT_FILENO);
-                    }
-                    execvp(cmd_list[j][0], cmd_list[j]);
-                    //----Bug: Exec won't back-----------
-                    dup2(old_stdout, STDOUT_FILENO);
-                    dup2(old_stdin, STDIN_FILENO);
-                    printf("------------------\n");
-                    printf("command: %s\n", cmd_list[j][0]);
-                    exit(0);
                 }
                 else
                 {
-                    int status_child;
-                    waitpid(child_pid, &status_child, 0);
+                    pipe_num[numpipe_idx].target_cmd_num = cmd_no + 1;
+                    pipe_num[numpipe_idx].fd = fd[cmd_idx];// previous cmd's fd
                 }
-                j++;
             }
+            //---------------------------------------------------------------------
+
+            //----------------Check if current cmd is target-----------------------
+            for(int i = 0; i<numpipe_idx; i++)
+            {
+                if(cmd_no == pipe_num[i].target_cmd_num)
+                {
+                    printf("exec num pipe.\n");
+                    break;
+                }
+            }
+            //---------------------------------------------------------------------
+            cmd_idx++;
+            cmd_no++;
         }
-        else if(i == 1)// input single command
-        {
-            status = sh_execute(args);
-        }
-        else// input nothing
-        {
-            continue;
-        }
-        free(line);
-        free(cmd);
-        free(args);
-    }while (status);
+    }while(status);
 }
 
-int main(int argc, char **argv, char *envp[])
+int main()
 {
     //--------initialize---------
     setenv("PATH", "bin:.", 1);

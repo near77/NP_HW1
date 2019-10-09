@@ -3,6 +3,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <unistd.h>
+#include <sys/wait.h>
 #define READBUF_SIZE 1024
 #define TOKENBUF_SIZE 128
 #define CMD_DELIMITERS "|"
@@ -125,14 +126,14 @@ char **parse_line(char *line, char * delimeters)// parse line with CMD_DELIMETER
 
 void shell_loop()
 {
-    int status = 1;
     char *line;// input
     char **cmd;// cmd
     char **args;// cmd arguments
     struct number_pipe pipe_num[1000];// record numbered pipe
     int numpipe_idx = 0;// record numbered pipe list idx
     int cmd_no = 1; //record ?th cmd is executing
-
+    int status = 1;
+    pid_t pid;
     do
     {
         printf("<o> ");
@@ -167,8 +168,8 @@ void shell_loop()
                 if (strcmp(args[0], builtin_str[i]) == 0) {
                     builtin_flag = 1;
                     (*builtin_func[i])(args);// Execute built in command
+                    break;
                 }
-                break;
             }
             if(builtin_flag == 1)
             {
@@ -178,7 +179,8 @@ void shell_loop()
             }
             //----------------------------------------------------------------------
             pipe(fd[cmd_idx]);
-
+            int stdin_fd = fd[cmd_idx][0];
+            int stdout_fd = fd[cmd_idx][1];
             //----------------Check if there are num pipe---------------------------
             if(cmd[cmd_idx+1])
             {
@@ -197,8 +199,9 @@ void shell_loop()
                 }
                 else
                 {
+                    //Need to check if next cmd is someone's target.**
                     pipe_num[numpipe_idx].target_cmd_num = cmd_no + 1;
-                    pipe_num[numpipe_idx].fd = fd[cmd_idx];// previous cmd's fd
+                    pipe_num[numpipe_idx].fd = fd[cmd_idx];// current cmd's fd
                 }
             }
             //---------------------------------------------------------------------
@@ -208,10 +211,28 @@ void shell_loop()
             {
                 if(cmd_no == pipe_num[i].target_cmd_num)
                 {
+                    stdin_fd = pipe_num[i].fd[0];
                     printf("exec num pipe.\n");
                     break;
                 }
             }
+            //---------------------------------------------------------------------
+
+            //-----------------Start forking child---------------------------------
+            if ((pid = fork()) == -1)
+            {
+                printf("failed to fork\n");
+                exit(EXIT_FAILURE);
+            }
+            if(pid == 0)
+            {
+                if(cmd_idx == 0)
+                {
+                    dup2(stdout_fd, STDOUT_FILENO);
+                    close(stdout_fd);
+                }
+            }
+
             //---------------------------------------------------------------------
             cmd_idx++;
             cmd_no++;

@@ -4,6 +4,7 @@
 #include <ctype.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <sys/types.h>
 #define READBUF_SIZE 1024
 #define TOKENBUF_SIZE 128
 #define CMD_DELIMITERS "|"
@@ -129,6 +130,7 @@ void shell_loop()
     char *line;// input
     char **cmd;// cmd
     char **args;// cmd arguments
+    char **exe_args;// exec cmd
     struct number_pipe pipe_num[1000];// record numbered pipe
     int numpipe_idx = 0;// record numbered pipe list idx
     int cmd_no = 1; //record ?th cmd is executing
@@ -149,13 +151,14 @@ void shell_loop()
         while(cmd_idx < num_of_cmd)
         {
             args = parse_line(cmd[cmd_idx], TOK_DELIMITERS);
-            int j = 0;
-            while(args[j])
+            if(isdigit(cmd[cmd_idx][0]))
             {
-                printf("Args: %s\n", args[j]);
-                j++;
+                exe_args = args + 1;
             }
-            
+            else
+            {
+                exe_args = args;
+            }
             //----------------Check if cmd is built in function----------------------
             int builtin_flag = 0;
             if (args[0] == NULL) 
@@ -178,32 +181,57 @@ void shell_loop()
                 continue;
             }
             //----------------------------------------------------------------------
-            pipe(fd[cmd_idx]);
-            int stdin_fd = fd[cmd_idx][0];
-            int stdout_fd = fd[cmd_idx][1];
+            int stdin_fd = dup(0);
+            int stdout_fd = dup(1);
             //----------------Check if there are num pipe---------------------------
             if(cmd[cmd_idx+1])
             {
-                if(isdigit(cmd[cmd_idx+1][0]))
+                if(isdigit(cmd[cmd_idx+1][0]))// record every num cmd
                 {
-                    if(cmd[cmd_idx+1][0]!='1')// record every num cmd
-                    {
-                        pipe_num[numpipe_idx].target_cmd_num = cmd_no + ((int)cmd[cmd_idx+1][0]-48);
-                        // start from previous cmd
-                        pipe_num[numpipe_idx].fd = fd[cmd_idx];// current cmd's fd
-                        printf("numpipe recorded| target: %d | fd: %d %d\n", \
-                            pipe_num[numpipe_idx].target_cmd_num, pipe_num[numpipe_idx].fd[0], pipe_num[numpipe_idx].fd[1]);
-                        numpipe_idx ++;
-                        numpipe_idx %= 1000;
-                    }
+                    pipe(fd[cmd_idx]);
+                    printf("ls pipe: <in> %d <out> %d\n", fd[cmd_idx][0], fd[cmd_idx][1]);
+                    stdin_fd = fd[cmd_idx][0];
+                    stdout_fd = fd[cmd_idx][1];
+                    pipe_num[numpipe_idx].target_cmd_num = cmd_no + ((int)cmd[cmd_idx+1][0]-48);
+                    // start from previous cmd
+                    pipe_num[numpipe_idx].fd = fd[cmd_idx];// current cmd's fd
+                    printf("numpipe recorded| target: %d | fd: %d %d\n", \
+                        pipe_num[numpipe_idx].target_cmd_num, pipe_num[numpipe_idx].fd[0], pipe_num[numpipe_idx].fd[1]);
                 }
                 else
                 {
-                    //Need to check if next cmd is someone's target.**
+                    //Need to check if next cmd is someone's target.
+                    int next_cmd_is_target = 0;
+                    int i;
+                    for(i = 0; i<numpipe_idx; i++)
+                    {
+                        if(cmd_no+1 == pipe_num[i].target_cmd_num)
+                        {
+                            stdout_fd = pipe_num[i].fd[1];
+                            next_cmd_is_target = 1;
+                            break;
+                        }
+                    }
                     pipe_num[numpipe_idx].target_cmd_num = cmd_no + 1;
-                    pipe_num[numpipe_idx].fd = fd[cmd_idx];// current cmd's fd
+                    if(next_cmd_is_target == 0)// next cmd is not someone's target
+                    {
+                        pipe(fd[cmd_idx]);
+                        stdout_fd = fd[cmd_idx][1];
+                        pipe_num[numpipe_idx].fd = fd[cmd_idx];// current cmd's fd
+                    }
+                    else// next cmd is someone's target
+                    {
+                        // redirect pipe to previous source of next cmd.
+                        stdin_fd = pipe_num[i].fd[0];
+                        stdout_fd = pipe_num[i].fd[1];
+                        pipe_num[numpipe_idx].fd = pipe_num[i].fd;
+                    }
                 }
+                numpipe_idx ++;
+                numpipe_idx %= 1000;
             }
+            
+            
             //---------------------------------------------------------------------
 
             //----------------Check if current cmd is target-----------------------
@@ -212,7 +240,7 @@ void shell_loop()
                 if(cmd_no == pipe_num[i].target_cmd_num)
                 {
                     stdin_fd = pipe_num[i].fd[0];
-                    printf("exec num pipe.\n");
+                    printf("exec pipe\n");
                     break;
                 }
             }
@@ -226,11 +254,27 @@ void shell_loop()
             }
             if(pid == 0)
             {
-                if(cmd_idx == 0)
+                // -----dup close issue--------------
+                dup2(stdin_fd, STDIN_FILENO);
+                dup2(stdout_fd, STDOUT_FILENO);
+                printf("used pipe: <in> %d <out> %d\n", stdin_fd, stdout_fd);
+                close(stdin_fd);
+                close(stdout_fd);
+                int idx = 0;
+                while(exe_args[idx])
                 {
-                    dup2(stdout_fd, STDOUT_FILENO);
-                    close(stdout_fd);
+                    printf("exec_arg[0]: %s\n", exe_args[idx]);
+                    idx++;
                 }
+                execvp(exe_args[0], exe_args);
+                exit(0);
+            }
+            else
+            {
+                close(stdout_fd);
+                close(stdin_fd);
+                int status_child;
+                waitpid(pid, &status_child, 0);
             }
 
             //---------------------------------------------------------------------

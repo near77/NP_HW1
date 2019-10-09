@@ -1,13 +1,12 @@
-123
-file
 bin
-bin_linux
+bin_mac
+Makefile
 npshell
+npshell_1.0.0.c
 npshell.c
 npshell.o
-npshell_0.0.1.c
 number
 test.html
-test.txt
 testpipe
 testpipe.c
+test.txt

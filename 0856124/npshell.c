@@ -181,8 +181,8 @@ void shell_loop()
                 continue;
             }
             //----------------------------------------------------------------------
-            int stdin_fd = dup(0);
-            int stdout_fd = dup(1);
+            int stdin_fd = STDIN_FILENO;
+            int stdout_fd = STDOUT_FILENO;
             //----------------Check if there are num pipe---------------------------
             if(cmd[cmd_idx+1])
             {
@@ -257,9 +257,9 @@ void shell_loop()
                 // -----dup close issue--------------
                 dup2(stdin_fd, STDIN_FILENO);
                 dup2(stdout_fd, STDOUT_FILENO);
-                printf("used pipe: <in> %d <out> %d\n", stdin_fd, stdout_fd);
                 close(stdin_fd);
-                close(stdout_fd);
+                
+                printf("used pipe: <in> %d <out> %d\n", stdin_fd, stdout_fd);
                 int idx = 0;
                 while(exe_args[idx])
                 {
@@ -271,8 +271,12 @@ void shell_loop()
             }
             else
             {
-                close(stdout_fd);
-                close(stdin_fd);
+                if(stdin_fd != STDIN_FILENO)
+                {
+                    close(stdin_fd);
+                    close(stdin_fd+1);
+                }
+                printf("%d, %d\n", stdin_fd, stdout_fd);
                 int status_child;
                 waitpid(pid, &status_child, 0);
             }

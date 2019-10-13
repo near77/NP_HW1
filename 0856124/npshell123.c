@@ -7,10 +7,12 @@
 #include <sys/types.h>
 #define READBUF_SIZE 1024
 #define TOKENBUF_SIZE 128
-#define CMD_DELIMITERS "|!"
+#define CMD_DELIMITERS "|!>"
 #define TOK_DELIMITERS " "
 #define ERR_DEL1 "|"
 #define ERR_DEL2 "!"
+#define FIL_DEL1 "|!"
+#define FIL_DEL2 ">"
 
 //----------------built in functions------------------
 int sh_exit(char **args)
@@ -155,6 +157,8 @@ void shell_loop()
         line = read_line();
         char *err_line = malloc(sizeof(line));
         strcpy(err_line, line);
+        char *fil_line = malloc(sizeof(line));
+        strcpy(fil_line, line);
         cmd = parse_line(line, CMD_DELIMITERS);
 
         int num_of_cmd = 0;
@@ -163,6 +167,24 @@ void shell_loop()
             num_of_cmd++;
         }
         int fd[num_of_cmd][2];// Fd for pipe
+
+        //--------Check file pipe-------------------
+        char **filpipe_check0;
+        char **filpipe_check1;
+        int fil_pipe_idx = 200;
+        int skip_idx = 200;
+        filpipe_check0 = parse_line(fil_line, FIL_DEL1);
+        int tmp_idx = 0;
+        while(filpipe_check0[tmp_idx])
+        {
+            filpipe_check1 = parse_line(filpipe_check0[tmp_idx], FIL_DEL2);
+            if(filpipe_check1[1])
+            {
+                fil_pipe_idx = tmp_idx;
+                skip_idx = tmp_idx + 1;
+            }
+        }
+        //--------------------------------------------
 
         //--------Check error pipe-------------------
         char **errpipe_check0; 
@@ -197,7 +219,7 @@ void shell_loop()
             }
             // ------------------------------------------------------
 
-            if(cmd_idx==num_of_cmd-1 && isdigit(cmd[cmd_idx][0]) && !cmd[cmd_idx][1])// skip ls |1/2/3 ...
+            if(cmd_idx==num_of_cmd-1 && isdigit(cmd[cmd_idx][0]))// skip ls |1/2/3 ...
             {
                 break;
             }
@@ -210,7 +232,7 @@ void shell_loop()
             {
                 exe_args = args;
             }
-
+            printf("Args %s\n", *exe_args);
             //-------Remove spaces in every tokens----------
             int tmp_idx = 0;
             while(exe_args[tmp_idx])

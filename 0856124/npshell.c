@@ -34,7 +34,7 @@ int sh_printenv(char **args)
 
 int sh_setenv(char **args)
 {
-    setenv("PATH", args[1], 1);
+    setenv(args[1], args[2], 1);
     return 0;
 }
 
@@ -134,7 +134,7 @@ char **parse_line(char *line, char * delimeters)// parse line with CMD_DELIMETER
                 exit(EXIT_FAILURE);
             }
         }
-        token = strtok(NULL, CMD_DELIMITERS);
+        token = strtok(NULL, delimeters);
     }
     tokens[position] = NULL;
     return tokens;
@@ -175,8 +175,18 @@ void shell_loop()
         printf("<o> ");
         line = read_line();
         char *err_line = malloc(sizeof(line));
+        if(!err_line)
+        {
+            printf("Allocation Fail.\n");
+            exit(EXIT_FAILURE);
+        }
         strcpy(err_line, line);
         char *fil_line = malloc(sizeof(line));
+        if(!fil_line)
+        {
+            printf("Allocation Fail.\n");
+            exit(EXIT_FAILURE);
+        }
         strcpy(fil_line, line);
         cmd = parse_line(line, CMD_DELIMITERS);
         int num_of_cmd = 0;
@@ -189,6 +199,7 @@ void shell_loop()
         //--------Check file pipe-------------------
         char **filpipe_check0;
         char **filpipe_check1;
+        char tstmsg[] = "testmessage\n";
         int fil_pipe_idx = 200;
         int skip_idx = 200;
         filpipe_check0 = parse_line(fil_line, FIL_DEL1);
@@ -319,6 +330,8 @@ void shell_loop()
                     // start from previous cmd
                     pipe_num[numpipe_idx].in_fd = fd[cmd_idx][0];// current cmd's fd
                     pipe_num[numpipe_idx].out_fd = fd[cmd_idx][1];
+                    printf("numpipe recorded| target: %d | fd: %d %d\n", \
+                        pipe_num[numpipe_idx].target_cmd_num, pipe_num[numpipe_idx].in_fd, pipe_num[numpipe_idx].out_fd);
                     numpipe_idx++;
                 }
                 else
@@ -386,7 +399,7 @@ void shell_loop()
                         dup2(stdin_fd, STDIN_FILENO);
                         if(is_filpipe)
                         {
-                            stdout_fd = open(filename, O_RDWR|O_CREAT|O_TRUNC);
+                            stdout_fd = open(filename, O_RDWR|O_CREAT|O_TRUNC, 0666);
                         }
                         if(is_errpipe)
                         {
@@ -399,9 +412,10 @@ void shell_loop()
                     {
                         if(stdout_fd != STDOUT_FILENO)
                         {
+                            printf("stdout_fd: %d\n", stdout_fd);
                             if(is_filpipe)
                             {
-                                stdout_fd = open(filename, O_RDWR|O_CREAT|O_TRUNC);
+                                stdout_fd = open(filename, O_RDWR|O_CREAT|O_TRUNC, 0666);
                             }
                             if(is_errpipe)
                             {
@@ -418,7 +432,7 @@ void shell_loop()
                     close(stdin_pipe[1]);
                     if(is_filpipe)
                     {
-                        stdout_fd = open(filename, O_RDWR|O_CREAT|O_TRUNC);
+                        stdout_fd = open(filename, O_RDWR|O_CREAT|O_TRUNC, 0666);
                     }
                     if(stdout_fd != STDOUT_FILENO)
                     {
@@ -436,13 +450,18 @@ void shell_loop()
                     dup2(stdin_fd, STDIN_FILENO);
                     if(is_filpipe)
                     {
-                        stdout_fd = open(filename, O_RDWR|O_CREAT|O_TRUNC);
+                        stdout_fd = open(filename, O_RDWR|O_CREAT|O_TRUNC,0666);
                     }
                     if(is_errpipe)
                     {
                         dup2(stdout_fd, STDERR_FILENO);
                     }
-                    dup2(stdout_fd, STDOUT_FILENO);
+                    if(dup2(stdout_fd, STDOUT_FILENO) < 0){
+                        printf("dup fail\n");
+                        exit(0);
+                    };
+                    write(STDOUT_FILENO, tstmsg, 20);
+                    //printf("mid stdout: %d\n", stdout_fd);
                     close(stdout_fd);
                 }
                 int fil_exist = 0;
@@ -461,6 +480,8 @@ void shell_loop()
             }
             else
             {
+                if(stdin_fd != STDIN_FILENO)
+                    close(stdin_fd);
                 if(stdout_fd != STDOUT_FILENO)
                     close(stdout_fd);
                 int status_child;

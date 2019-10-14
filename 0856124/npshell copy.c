@@ -3,6 +3,8 @@
 #include <string.h>
 #include <ctype.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <sys/types.h>
 #define READBUF_SIZE 1024
@@ -32,8 +34,7 @@ int sh_printenv(char **args)
 
 int sh_setenv(char **args)
 {
-    setenv("PATH", args[1], 1);
-    printf("env had been set.\n");
+    setenv(args[1], args[2], 1);
     return 0;
 }
 
@@ -133,12 +134,30 @@ char **parse_line(char *line, char * delimeters)// parse line with CMD_DELIMETER
                 exit(EXIT_FAILURE);
             }
         }
-        token = strtok(NULL, CMD_DELIMITERS);
+        token = strtok(NULL, delimeters);
     }
     tokens[position] = NULL;
     return tokens;
 }
 
+int file_exist(char* file)
+{
+    char bin[20];
+    strcpy(bin, "bin/");
+    strcat(bin, file);
+    if( access( bin, F_OK ) != -1 ) 
+    {
+        // file exists
+        
+        return 1;
+    } 
+    else 
+    {
+        // file doesn't exist
+        
+        return 0;
+    }
+}
 
 void shell_loop()
 {
@@ -156,18 +175,27 @@ void shell_loop()
         printf("<o> ");
         line = read_line();
         char *err_line = malloc(sizeof(line));
+        if(!err_line)
+        {
+            printf("Allocation Fail.\n");
+            exit(EXIT_FAILURE);
+        }
         strcpy(err_line, line);
         char *fil_line = malloc(sizeof(line));
+        if(!fil_line)
+        {
+            printf("Allocation Fail.\n");
+            exit(EXIT_FAILURE);
+        }
         strcpy(fil_line, line);
         cmd = parse_line(line, CMD_DELIMITERS);
-
         int num_of_cmd = 0;
         while(cmd[num_of_cmd])// calculate number of command
         {
             num_of_cmd++;
         }
         int fd[num_of_cmd][2];// Fd for pipe
-
+        
         //--------Check file pipe-------------------
         char **filpipe_check0;
         char **filpipe_check1;
@@ -183,6 +211,7 @@ void shell_loop()
                 fil_pipe_idx = tmp_idx;
                 skip_idx = tmp_idx + 1;
             }
+            tmp_idx++;
         }
         //--------------------------------------------
 
@@ -207,6 +236,24 @@ void shell_loop()
         int cmd_idx = 0;
         while(cmd_idx < num_of_cmd)
         {
+            // ----------Check if current cmd has file pipe---------
+            int is_filpipe = 0;
+            char *filename;
+            if(cmd_idx == fil_pipe_idx)
+            {
+                is_filpipe = 1;
+                filename = cmd[cmd_idx+1];
+                remove_spaces(filename);
+            }
+            if(cmd_idx == skip_idx)
+            {
+                cmd_idx++;
+                continue;
+            }
+
+            // -----------------------------------------------------
+            
+            
             // ----------Check if current cmd has err pipe----------
             int is_errpipe = 0;
             for(int i = 0; i < err_idx_cnt; i++)
@@ -219,7 +266,7 @@ void shell_loop()
             }
             // ------------------------------------------------------
 
-            if(cmd_idx==num_of_cmd-1 && isdigit(cmd[cmd_idx][0]))// skip ls |1/2/3 ...
+            if(cmd_idx==num_of_cmd-1 && isdigit(cmd[cmd_idx][0]) && !cmd[cmd_idx][1])// skip ls |1/2/3 ...
             {
                 break;
             }
@@ -232,7 +279,7 @@ void shell_loop()
             {
                 exe_args = args;
             }
-            printf("Args %s\n", *exe_args);
+
             //-------Remove spaces in every tokens----------
             int tmp_idx = 0;
             while(exe_args[tmp_idx])
@@ -275,7 +322,6 @@ void shell_loop()
                 if(isdigit(cmd[cmd_idx+1][0])&&cmd[cmd_idx+1][0]!='1')// record every num cmd
                 {
                     pipe(fd[cmd_idx]);
-                    printf("ls pipe: <in> %d <out> %d\n", fd[cmd_idx][0], fd[cmd_idx][1]);
                     stdout_pipe[0] = fd[cmd_idx][0]; 
                     stdout_pipe[1] = fd[cmd_idx][1];
                     stdout_fd = fd[cmd_idx][1];
@@ -283,8 +329,6 @@ void shell_loop()
                     // start from previous cmd
                     pipe_num[numpipe_idx].in_fd = fd[cmd_idx][0];// current cmd's fd
                     pipe_num[numpipe_idx].out_fd = fd[cmd_idx][1];
-                    printf("numpipe recorded| target: %d | fd: %d %d\n", \
-                        pipe_num[numpipe_idx].target_cmd_num, pipe_num[numpipe_idx].in_fd, pipe_num[numpipe_idx].out_fd);
                     numpipe_idx++;
                 }
                 else
@@ -345,12 +389,15 @@ void shell_loop()
             }
             if(pid == 0)
             {
-                // -----dup close issue--------------
                 if(cmd_idx == 0)
                 {
                     if(is_target)
                     {  
                         dup2(stdin_fd, STDIN_FILENO);
+                        if(is_filpipe)
+                        {
+                            stdout_fd = open(filename, O_RDWR|O_CREAT|O_TRUNC, 0666);
+                        }
                         if(is_errpipe)
                         {
                             dup2(stdout_fd, STDERR_FILENO);
@@ -362,6 +409,10 @@ void shell_loop()
                     {
                         if(stdout_fd != STDOUT_FILENO)
                         {
+                            if(is_filpipe)
+                            {
+                                stdout_fd = open(filename, O_RDWR|O_CREAT|O_TRUNC, 0666);
+                            }
                             if(is_errpipe)
                             {
                                 dup2(stdout_fd, STDERR_FILENO);
@@ -375,6 +426,10 @@ void shell_loop()
                 {
                     dup2(stdin_fd, STDIN_FILENO);
                     close(stdin_pipe[1]);
+                    if(is_filpipe)
+                    {
+                        stdout_fd = open(filename, O_RDWR|O_CREAT|O_TRUNC, 0666);
+                    }
                     if(stdout_fd != STDOUT_FILENO)
                     {
                         if(is_errpipe)
@@ -389,6 +444,10 @@ void shell_loop()
                 {
                     close(stdin_pipe[1]);
                     dup2(stdin_fd, STDIN_FILENO);
+                    if(is_filpipe)
+                    {
+                        stdout_fd = open(filename, O_RDWR|O_CREAT|O_TRUNC,0666);
+                    }
                     if(is_errpipe)
                     {
                         dup2(stdout_fd, STDERR_FILENO);
@@ -396,15 +455,24 @@ void shell_loop()
                     dup2(stdout_fd, STDOUT_FILENO);
                     close(stdout_fd);
                 }
+                int fil_exist = 0;
+                fil_exist = file_exist(exe_args[0]);
+                if(fil_exist)
+                {
+                    execvp(exe_args[0], exe_args);
+                }
+                else
+                {
+                    printf("unknown command: [%s]\n", exe_args[0]);
+                }
                 
-                execvp(exe_args[0], exe_args);
+                
                 exit(0);
             }
             else
             {
                 if(stdout_fd != STDOUT_FILENO)
                     close(stdout_fd);
-                printf("stdin: %d, stdout: %d\n", stdin_fd, stdout_fd);
                 int status_child;
                 waitpid(pid, &status_child, 0);
             }

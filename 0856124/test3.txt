@@ -1,0 +1,10 @@
+   1 bin
+   2 Makefile
+   3 npshell
+   4 npshell_0.c
+   5 npshell.c
+   6 npshell.o
+   7 test1.txt
+   8 test2.txt
+   9 test.html
+  10 test.txt

@@ -4,7 +4,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <signal.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <sys/types.h>
@@ -236,15 +235,6 @@ int file_exist(char* file)
     else {return 0;}
 }
 
-void childHandler(int signo) 
-{
-    int status;
-    while (waitpid(-1, &status, WNOHANG) > 0) 
-    {
-        //do nothing
-    }
-}
-
 void shell_loop()
 {
     char *line;
@@ -281,19 +271,6 @@ void shell_loop()
         }
         //-----------------------------------------------------------
         
-        //--Check if end with pipeN----------------------------------
-        int lineEndsWithPipeN = 0;
-        int last_cmd_idx = 0;
-        while(cmd[num_of_cmd-1][last_cmd_idx])
-        {
-            last_cmd_idx ++;
-        }
-        if(isdigit(cmd[num_of_cmd-1][last_cmd_idx-1]))
-        {
-            lineEndsWithPipeN = 1;
-        }
-        //-----------------------------------------------------------
-
         int cmd_idx = 0;
         while(cmd_idx < num_of_cmd)
         {
@@ -424,14 +401,11 @@ void shell_loop()
             }
 
             //--Start forking----------------------------------------
-
-            signal(SIGCHLD, childHandler);
-
-            while((pid = fork()) < 0)
+            if ((pid = fork()) == -1)
             {
-                usleep(1000);
+                printf("failed to fork\n");
+                exit(EXIT_FAILURE);
             }
-            
             if(pid == 0)
             {
                 if(cmd_idx == 0)
@@ -484,11 +458,9 @@ void shell_loop()
             }
             else
             {
-                if(!lineEndsWithPipeN)
-                {
-                    int status_child;
-                    waitpid(pid, &status_child, 0);
-                }
+                //printf("Stdin: %d, Stdout: %d\n", stdin_fd, stdout_fd);
+                int status_child;
+                waitpid(pid, &status_child, 0);
             }
             //-------------------------------------------------------
             cmd_no++;

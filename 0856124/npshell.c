@@ -148,13 +148,11 @@ int file_exist(char* file)
     if( access( bin, F_OK ) != -1 ) 
     {
         // file exists
-        
         return 1;
     } 
     else 
     {
         // file doesn't exist
-        
         return 0;
     }
 }
@@ -318,10 +316,13 @@ void shell_loop()
             int stdout_pipe[2];
 
             //----------------Check if there are num pipe---------------------------
+            int next_cmd_is_target = 0;
+            int is_numpipe = 0;
             if(cmd[cmd_idx+1])
             {
                 if(isdigit(cmd[cmd_idx+1][0])&&cmd[cmd_idx+1][0]!='1')// record every num cmd
                 {
+                    is_numpipe = 1;
                     pipe(fd[cmd_idx]);
                     stdout_pipe[0] = fd[cmd_idx][0]; 
                     stdout_pipe[1] = fd[cmd_idx][1];
@@ -337,7 +338,6 @@ void shell_loop()
                 else
                 {
                     //Need to check if next cmd is someone's target.
-                    int next_cmd_is_target = 0;
                     int i;
                     for(i = 0; i < numpipe_idx; i++)
                     {
@@ -361,10 +361,24 @@ void shell_loop()
                         pipe_num[numpipe_idx].out_fd = fd[cmd_idx][1];
                         pipe_num[numpipe_idx].target_cmd_num = cmd_no + 1;
                         numpipe_idx++;
+                        next_cmd_is_target = 1;
                     }
                 }
                 numpipe_idx %= 1000;
             }
+            else
+            {
+                for(int i = 0; i < numpipe_idx; i++)
+                {
+                    if(cmd_no + 1 == pipe_num[i].target_cmd_num)
+                    {
+                        // redirect pipe to previous source of next cmd.
+                        next_cmd_is_target = 1;
+                        break;
+                    }
+                }
+            }
+            
             
             
             //---------------------------------------------------------------------
@@ -375,6 +389,7 @@ void shell_loop()
             {
                 if(cmd_no == pipe_num[i].target_cmd_num)
                 {
+                    printf("is target \n");
                     is_target = 1;
                     stdin_pipe[0] = pipe_num[i].in_fd;
                     stdin_pipe[1] = pipe_num[i].out_fd;
@@ -456,12 +471,11 @@ void shell_loop()
                     {
                         dup2(stdout_fd, STDERR_FILENO);
                     }
-                    if(dup2(stdout_fd, STDOUT_FILENO) < 0){
+                    if(dup2(stdout_fd, STDOUT_FILENO) < 0)
+                    {
                         printf("dup fail\n");
                         exit(0);
-                    };
-                    write(STDOUT_FILENO, tstmsg, 20);
-                    //printf("mid stdout: %d\n", stdout_fd);
+                    }
                     close(stdout_fd);
                 }
                 int fil_exist = 0;
@@ -474,18 +488,20 @@ void shell_loop()
                 {
                     printf("unknown command: [%s]\n", exe_args[0]);
                 }
-                
-                
                 exit(0);
             }
             else
             {
+                printf("Stdin: %d, Stdout: %d\n", stdin_fd, stdout_fd);
                 if(stdin_fd != STDIN_FILENO)
                     close(stdin_fd);
-                if(stdout_fd != STDOUT_FILENO)
-                    close(stdout_fd);
                 int status_child;
                 waitpid(pid, &status_child, 0);
+                if(stdout_fd != STDOUT_FILENO && !is_numpipe)
+                {
+                    printf("Close %d\n", stdout_fd);
+                    close(stdout_fd);
+                }
             }
 
             //---------------------------------------------------------------------

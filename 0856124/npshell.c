@@ -293,7 +293,11 @@ void shell_loop()
             lineEndsWithPipeN = 1;
         }
         //-----------------------------------------------------------
-
+        int line_pid[num_of_cmd];
+        for(int i = 0; i < num_of_cmd; i++)
+        {
+            line_pid[i] = -1;
+        }
         int cmd_idx = 0;
         while(cmd_idx < num_of_cmd)
         {
@@ -484,10 +488,15 @@ void shell_loop()
             }
             else
             {
-                if(!lineEndsWithPipeN)
+                line_pid[cmd_idx] = pid;
+                if(!lineEndsWithPipeN && cmd_idx == num_of_cmd-1)
                 {
-                    int status_child;
-                    waitpid(pid, &status_child, 0);
+                    for(int i = 0; i < num_of_cmd; i++)
+                    {
+                        int status_child;
+                        waitpid(line_pid[i], &status_child, 0);
+                    }
+                    
                 }
             }
             //-------------------------------------------------------

@@ -81,7 +81,8 @@ char *read_line()
         }
         else if(c == EOF)
         {
-            return NULL;
+            printf("\n");
+            exit(0);
         }
         else
         {

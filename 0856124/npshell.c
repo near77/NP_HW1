@@ -74,10 +74,14 @@ char *read_line()
     while(1)
     {
         c = getchar();
-        if(c == EOF || c == '\n')
+        if(c == '\n')
         {
             buffer[line_position] = '\0';
             return buffer;
+        }
+        else if(c == EOF)
+        {
+            return NULL;
         }
         else
         {
@@ -257,8 +261,12 @@ void shell_loop()
     pid_t pid;
     do
     {
-        printf("<?> ");
+        printf("%% ");
         line = read_line();
+        if(!line)
+        {
+            break;
+        }
         //--Parse file pipe------------------------------------------
         int *filepipe_skip;
         filepipe_skip = parse_filepipe(line);

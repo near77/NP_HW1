@@ -373,16 +373,30 @@ void shell_loop()
                 if(isdigit(cmd[cmd_idx+1][0])&&cmd[cmd_idx+1][0]!='1')// record every num cmd
                 {
                     is_numpipe = 1;
-                    int fd[2];
-                    pipe(fd);
-                    pipe_num[numpipe_idx].target_cmd_num = cmd_no + ((int)cmd[cmd_idx+1][0]-48);
-                    // start from previous cmd
-                    pipe_num[numpipe_idx].in_fd = fd[0];// current cmd's fd
-                    pipe_num[numpipe_idx].out_fd = fd[1];
-                    stdout_fd = fd[1];
-                    // printf("Numpipe recorded | Target No: %d | fd:(%d, %d)\n", \
-                    //     pipe_num[numpipe_idx].target_cmd_num, pipe_num[numpipe_idx].in_fd, pipe_num[numpipe_idx].out_fd);
-                    numpipe_idx++;
+                    int target_no = cmd_no + ((int)cmd[cmd_idx+1][0]-48);
+                    int others_target = 0;
+                    for(int i = 0; i < numpipe_idx; i++)
+                    {
+                        if(target_no == pipe_num[i].target_cmd_num)
+                        {
+                            stdout_fd = pipe_num[i].out_fd;
+                            others_target = 1;
+                            break;
+                        }
+                    }
+                    if(!others_target)
+                    {
+                        int fd[2];
+                        pipe(fd);
+                        pipe_num[numpipe_idx].target_cmd_num = target_no;
+                        // start from previous cmd
+                        pipe_num[numpipe_idx].in_fd = fd[0];// current cmd's fd
+                        pipe_num[numpipe_idx].out_fd = fd[1];
+                        stdout_fd = fd[1];
+                        // printf("Numpipe recorded | Target No: %d | fd:(%d, %d)\n", \
+                        //     pipe_num[numpipe_idx].target_cmd_num, pipe_num[numpipe_idx].in_fd, pipe_num[numpipe_idx].out_fd);
+                        numpipe_idx++;
+                    }
                 }
                 else
                 {

@@ -268,6 +268,8 @@ void shell_loop()
         {
             break;
         }
+        printf("Line: %s\n", line);
+        /*
         //--Parse file pipe------------------------------------------
         int *filepipe_skip;
         filepipe_skip = parse_filepipe(line);
@@ -527,6 +529,7 @@ void shell_loop()
         }
         free(line);
         free(cmd);
+        */
     } while (status);
 }
 

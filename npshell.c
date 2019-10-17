@@ -286,7 +286,6 @@ void shell_loop()
         int num_of_cmd = 0;
         while(cmd[num_of_cmd])// Calculate number of command
         {
-            printf("cmd:　%s\n", cmd[num_of_cmd]);
             num_of_cmd++;
         }
         //-----------------------------------------------------------

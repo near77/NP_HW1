@@ -1,8 +1,0 @@
-bin
-Makefile
-npshell
-npshell_0.c
-npshell.c
-npshell.o
-test.html
-test.txt

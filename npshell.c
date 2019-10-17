@@ -166,8 +166,10 @@ int *parse_filepipe(char *line)
     return filepipe_skip;
 }
 
-void parse_errorpipe(char *line, int *err_idx)
+int * parse_errorpipe(char *line)
 {
+    int err_idx[60];
+    for(int i = 0; i < 60; i++){err_idx[i] = -1;}// Initialize all to -1
     char *err_line = malloc(sizeof(line)+1);
     if(!err_line)
     {
@@ -191,6 +193,7 @@ void parse_errorpipe(char *line, int *err_idx)
         errpipe_idx++;
     }
     free(err_line);
+    return err_idx;
 }
 
 void remove_spaces(char* s) 
@@ -278,9 +281,7 @@ void shell_loop()
         //-----------------------------------------------------------
         
         //--Parse error pipe-----------------------------------------
-        int err_idx_table[60]; // Initialize all to -1
-        for(int i = 0; i < 60; i++){err_idx_table[i] = -1;}
-        parse_errorpipe(line, err_idx_table);
+        int * err_idx_table = parse_errorpipe(line); 
         //-----------------------------------------------------------
         
         //--Parse line and calculate cmd num-------------------------

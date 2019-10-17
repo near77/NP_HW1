@@ -162,7 +162,7 @@ int *parse_filepipe(char *line)
     }
     filepipe_skip[0] = filepipe_idx;
     filepipe_skip[1] = skip_idx;
-    // free(file_line);
+    free(file_line);
     return filepipe_skip;
 }
 
@@ -190,7 +190,7 @@ void parse_errorpipe(char *line, int *err_idx)
         }
         errpipe_idx++;
     }
-    // free(err_line);
+    free(err_line);
 }
 
 void remove_spaces(char* s) 
@@ -475,7 +475,6 @@ void shell_loop()
                     dup2(stdin_fd, STDIN_FILENO);
                     if(is_filepipe){stdout_fd = open(filename, O_RDWR|O_CREAT|O_TRUNC, 0666);}
                     if(is_errpipe){dup2(stdout_fd, STDERR_FILENO);}
-                    //dup2(stdout_fd, STDOUT_FILENO);
                     if(dup2(stdout_fd, STDOUT_FILENO) < 0)
                     {
                         printf("dup fail\n");

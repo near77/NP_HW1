@@ -524,6 +524,8 @@ void shell_loop()
             //-------------------------------------------------------
             cmd_no++;
             cmd_idx++;
+            free(line);
+            free(cmd);
         }
     } while (status);
 }

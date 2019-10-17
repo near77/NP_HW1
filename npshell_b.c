@@ -138,7 +138,7 @@ int *parse_filepipe(char *line)
     int skip_idx = -1;  // The idx after file pipe idx will be file name
                         //So skip this idx.
     static int filepipe_skip[2];
-    char *file_line = malloc(sizeof(line)+1);
+    char *file_line = malloc(sizeof(line));
     if(!file_line)
     {
         printf("File Line Allocation Fail.\n");
@@ -168,7 +168,7 @@ int *parse_filepipe(char *line)
 
 void parse_errorpipe(char *line, int *err_idx)
 {
-    char *err_line = malloc(sizeof(line)+1);
+    char *err_line = malloc(sizeof(line));
     if(!err_line)
     {
         printf("Error Line Allocation Fail.\n");

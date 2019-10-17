@@ -162,7 +162,7 @@ int *parse_filepipe(char *line)
     }
     filepipe_skip[0] = filepipe_idx;
     filepipe_skip[1] = skip_idx;
-    free(file_line);
+    // free(file_line);
     return filepipe_skip;
 }
 
@@ -190,7 +190,7 @@ void parse_errorpipe(char *line, int *err_idx)
         }
         errpipe_idx++;
     }
-    free(err_line);
+    // free(err_line);
 }
 
 void remove_spaces(char* s) 

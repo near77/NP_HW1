@@ -342,16 +342,15 @@ void shell_loop()
             //-------------------------------------------------------
 
             //--Skip last cmd if it's just numpipe(....|2)-----------
-            if(cmd_idx==num_of_cmd-1 && isdigit(cmd[cmd_idx][0]) && !cmd[cmd_idx][1]){break;}
+            int i = 0;
+            while(isdigit(cmd[cmd_idx][i])){i++;}
+            if(cmd_idx==num_of_cmd-1 && isdigit(cmd[cmd_idx][0]) && !cmd[cmd_idx][i]){break;}
             //-------------------------------------------------------
 
             //--Parse cmd argument with space------------------------
             args = parse_line(cmd[cmd_idx], TOK_DELI);
             if (args[0] == NULL) {continue;}// Skip empty cmd.
-            if(isdigit(cmd[cmd_idx][0]))
-            {
-                args = args + 1;// If start with digit skip it.(1 ls)
-            }
+            args = args + i;// If start with digit skip it.(1 ls)
             //-------------------------------------------------------
 
             //--Check if it's builtin function-----------------------
@@ -371,10 +370,17 @@ void shell_loop()
             int is_numpipe = 0;
             if(cmd[cmd_idx+1])
             {
-                if(isdigit(cmd[cmd_idx+1][0])&&cmd[cmd_idx+1][0]!='1')// record every num cmd
+                if(isdigit(cmd[cmd_idx+1][0])&&cmd[cmd_idx+1][0]!='1'||isdigit(cmd[cmd_idx+1][1]))// record every num cmd
                 {
                     is_numpipe = 1;
-                    int target_no = cmd_no + ((int)cmd[cmd_idx+1][0]-48);
+                    int i = 0;
+                    int target_no = 0;
+                    while(isdigit(cmd[cmd_idx+1][i]))
+                    {
+                        target_no = target_no*10 + ((int)cmd[cmd_idx+1][i]-48);
+                        i++;
+                    }
+                    target_no = cmd_no + target_no;
                     int others_target = 0;
                     for(int i = 0; i < numpipe_idx; i++)
                     {
@@ -432,7 +438,7 @@ void shell_loop()
             //--Check if current cmd is target-----------------------
             int is_target = 0;
             int stdin_pipe[2];
-
+    
             for(int i = 0; i<numpipe_idx; i++)
             {
                 if(cmd_no == pipe_num[i].target_cmd_num)
@@ -445,12 +451,7 @@ void shell_loop()
                 }
             }
             //-------------------------------------------------------
-
-            if(is_target)
-            {
-                close(stdin_pipe[1]);
-            }
-
+            if(is_target){close(stdin_pipe[1]);}
             //--Start forking----------------------------------------
 
             signal(SIGCHLD, childHandler);
@@ -467,16 +468,19 @@ void shell_loop()
                     if(is_target)
                     {
                         dup2(stdin_fd, STDIN_FILENO);
+                        close(stdin_fd);
                         if(is_filepipe){stdout_fd = open(filename, O_RDWR|O_CREAT|O_TRUNC, 0666);}
                         if(is_errpipe){dup2(stdout_fd, STDERR_FILENO);}
                         dup2(stdout_fd, STDOUT_FILENO);
                     }
                     else
                     {
-                        
                         if(is_filepipe){stdout_fd = open(filename, O_RDWR|O_CREAT|O_TRUNC, 0666);}
                         if(is_errpipe){dup2(stdout_fd, STDERR_FILENO);}
-                        dup2(stdout_fd, STDOUT_FILENO);
+                        if(!dup2(stdout_fd, STDOUT_FILENO))
+                        {
+                            printf("dup fail\n");
+                        }
                     }
                 }
                 else if(cmd_idx == num_of_cmd-1)
@@ -496,17 +500,8 @@ void shell_loop()
                         exit(0);
                     }
                 }
-                close_unused_fd();
                 
-                // int f_exist = file_exist(args[0]);
-                // if(f_exist)
-                // {
-                //     status = execvp(args[0], args);
-                // }
-                // else
-                // {
-                //     printf("unknown command: [%s].\n", args[0]);
-                // }
+                close_unused_fd();
                 if(execvp(args[0], args) == -1)
                 {
                     printf("Unknown command: [%s].\n", args[0]);

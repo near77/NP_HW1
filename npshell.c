@@ -509,12 +509,13 @@ void shell_loop()
                 // }
                 if(execvp(args[0], args) == -1)
                 {
-                    printf("unknown command: [%s].\n", args[0]);
+                    printf("Unknown command: [%s].\n", args[0]);
                 }
                 exit(0);
             }
             else
             {
+                if(is_filepipe){num_of_cmd-=1;}
                 line_pid[cmd_idx] = pid;
                 if(!lineEndsWithPipeN && cmd_idx == num_of_cmd-1)
                 {

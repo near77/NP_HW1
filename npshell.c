@@ -8,8 +8,8 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <sys/types.h>
-#define READBUF_SIZE 1024
-#define TOKENBUF_SIZE 64
+#define READBUF_SIZE 15000
+#define TOKENBUF_SIZE 256
 #define TOK_DELI " "
 #define CMD_DELI "|!>"
 #define FIL_DELI1 "|!"
@@ -261,7 +261,7 @@ void shell_loop()
     int status = 1;
     int cmd_no = 1; //record ?th cmd is executing
     int numpipe_idx = 0;// record numbered pipe list idx
-    struct number_pipe pipe_num[1000];// record numbered pipe
+    struct number_pipe pipe_num[2000];// record numbered pipe
     pid_t pid;
     do
     {
@@ -431,7 +431,7 @@ void shell_loop()
                         numpipe_idx++;
                     }
                 }
-                numpipe_idx %= 1000;
+                numpipe_idx %= 2000;
             }
             //-------------------------------------------------------
 
@@ -455,12 +455,12 @@ void shell_loop()
             //--Start forking----------------------------------------
 
             signal(SIGCHLD, childHandler);
-
-            while((pid = fork()) < 0)
+            pid = fork();
+            while(pid < 0)
             {
+                pid = fork();
                 usleep(1000);
             }
-            
             if(pid == 0)
             {
                 if(cmd_idx == 0)
@@ -468,7 +468,6 @@ void shell_loop()
                     if(is_target)
                     {
                         dup2(stdin_fd, STDIN_FILENO);
-                        close(stdin_fd);
                         if(is_filepipe){stdout_fd = open(filename, O_RDWR|O_CREAT|O_TRUNC, 0666);}
                         if(is_errpipe){dup2(stdout_fd, STDERR_FILENO);}
                         dup2(stdout_fd, STDOUT_FILENO);
@@ -510,15 +509,14 @@ void shell_loop()
             }
             else
             {
+                if(is_target){close(stdin_pipe[0]);}
                 if(is_filepipe){num_of_cmd-=1;}
                 line_pid[cmd_idx] = pid;
                 if(!lineEndsWithPipeN && cmd_idx == num_of_cmd-1)
                 {
-                    for(int i = 0; i < num_of_cmd; i++)
-                    {
-                        int status_child;
-                        waitpid(line_pid[i], &status_child, 0);
-                    }
+                    int status_child;
+                    waitpid(pid, &status_child, 0);
+                    
                     
                 }
             }

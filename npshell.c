@@ -498,12 +498,16 @@ void shell_loop()
                 }
                 close_unused_fd();
                 
-                int f_exist = file_exist(args[0]);
-                if(f_exist)
-                {
-                    status = execvp(args[0], args);
-                }
-                else
+                // int f_exist = file_exist(args[0]);
+                // if(f_exist)
+                // {
+                //     status = execvp(args[0], args);
+                // }
+                // else
+                // {
+                //     printf("unknown command: [%s].\n", args[0]);
+                // }
+                if(execvp(args[0], args) == -1)
                 {
                     printf("unknown command: [%s].\n", args[0]);
                 }
